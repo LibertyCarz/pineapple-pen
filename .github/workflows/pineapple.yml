@@ -1,0 +1,298 @@
+name: Pineapple Pen
+
+on:
+  repository_dispatch:
+    types:
+      - ppap
+      - v*
+
+env:
+  LC_ALL: en_US.UTF-8
+  LANG: en_US.UTF-8
+  P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+  REF_NAME: ${{ github.event.client_payload.ref_name }}
+  TRIGGERING_ACTOR: ${{ github.event.client_payload.triggering_actor }}
+  MAIN_REPOSITORY: ${{ secrets.MEME_REPOSITORY }}
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  TELEGRAM_CHANNEL_ID: ${{ vars.TELEGRAM_CHANNEL_ID }}
+  API_KEY_JSON: ${{ secrets.API_KEY_JSON }}
+  PRO_API_KEY_JSON: ${{ secrets.PRO_API_KEY_JSON }}
+  PRO_PLAY_STORE_KEY_JSON: ${{ secrets.PRO_PLAY_STORE_KEY_JSON }}
+  RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+  DYNAMIC_CONSTANTS_TS_PROD_BASE64: ${{ secrets.MEME_DYNAMIC_CONSTANTS_TS_PROD_BASE64 }}
+  PRO_GOOGLE_SERVICES_JSON: ${{ secrets.MEME_PRO_GOOGLE_SERVICES_JSON }}
+  PRO_GOOGLESERVICE_INFO_PLIST: ${{ secrets.MEME_PRO_GOOGLESERVICE_INFO_PLIST }}
+
+jobs:
+  init:
+    name: Init
+    runs-on: macos-14
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.value }}
+      message-information: ${{ steps.get-message-information.outputs.value }}
+      env: ${{ steps.set-env.outputs.value }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MAIN_REPOSITORY }}
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ github.event.client_payload.ref_name}}
+
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          MATRIX="[{\"format\":\"IPA\",\"name\":\"macos-14\",\"platform\":\"IOS\"},{\"format\":\"APK\",\"name\":\"ubuntu-22.04\",\"platform\":\"ANDROID\"}]"
+          if [[ "$REF_NAME" =~ "prd" ]]; then
+            MATRIX="[{\"format\":\"IPA\",\"name\":\"macos-14\",\"platform\":\"IOS\"},{\"format\":\"APK\",\"name\":\"ubuntu-22.04\",\"platform\":\"ANDROID\"},{\"format\":\"AAB\",\"name\":\"ubuntu-22.04\",\"platform\":\"ANDROID\"}]"
+          fi
+          echo "value=$MATRIX" >> $GITHUB_OUTPUT
+
+      - name: Set env
+        id: set-env
+        run: |
+          ENV='dev'
+          if [[ "$REF_NAME" =~ "prd" ]]; then
+            ENV='prd'
+          elif [[ "$REF_NAME" =~ "stg" ]]; then
+            ENV='stg'
+          fi
+          echo "value=$ENV" >> $GITHUB_OUTPUT
+
+      - name: Generate message
+        id: get-message-information
+        run: |
+          source .github/scripts/utils.sh
+          echo "value=$(get_message_information)" >> "$GITHUB_OUTPUT"
+        timeout-minutes: 1
+
+      - name: Log value
+        run: |
+          echo tag-source: $REF_NAME
+          echo matrix: ${{ steps.set-matrix.outputs.value }}
+          echo message-information: ${{ steps.get-message-information.outputs.value }}
+          echo env: ${{ steps.set-env.outputs.value }}
+
+      - name: Send telegram message
+        if: vars.IS_SILENT != 'true'
+        uses: PacificPromise/macos-telegram-action@main
+        with:
+          type: channel
+          message: "🎬 -  Start build: ${{ steps.get-message-information.outputs.value }}"
+
+  prepare:
+    name: Prepare ${{ matrix.platform  }}
+    continue-on-error: true
+    needs: [init]
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: "macos-14"
+            platform: "IOS"
+          - name: "ubuntu-22.04"
+            platform: "ANDROID"
+    runs-on: ${{ matrix.name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MAIN_REPOSITORY }}
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ github.event.client_payload.ref_name}}
+
+      - name: Setup Node v18
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ matrix.platform }}-cache-node-modules-${{ hashFiles('yarn.lock') }}
+          lookup-only: true
+
+      - name: Unlock ssh agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY_SDK_CORE_CLIENT }}
+
+      - name: Run yarn install
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        uses: borales/actions-yarn@v5
+        with:
+          cmd: install --network-concurrency 1
+
+      - name: Send telegram message failure
+        if: ${{ failure() && vars.IS_SILENT != 'true' }}
+        uses: PacificPromise/macos-telegram-action@main
+        with:
+          type: channel
+          message: "💥 - Failure ${{ matrix.platform }}: ${{ needs.init.outputs.message-information }}"
+
+  deploy:
+    name: Deployment ${{ matrix.format }}
+    continue-on-error: true
+    strategy:
+      fail-fast: true
+      matrix:
+        include: ${{ fromJson(needs.init.outputs.matrix) }}
+    runs-on: ${{ matrix.name }}
+    needs: [init, prepare]
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MAIN_REPOSITORY }}
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ github.event.client_payload.ref_name}}
+
+      # NOTE: setup environment
+      - name: Setup ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ".ruby-version"
+          bundler-cache: true
+
+      - name: Setup Node v18
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        if: matrix.platform == 'ANDROID'
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: "gradle"
+
+      - name: Setup Android SDK
+        if: matrix.platform == 'ANDROID'
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        if: matrix.platform == 'ANDROID'
+        with:
+          ndk-version: r26c
+
+      - name: Setup cocoapods
+        if: matrix.platform == 'IOS'
+        uses: maxim-lobanov/setup-cocoapods@v1
+        with:
+          version: 1.14.3
+
+      - name: Select Xcode
+        if: matrix.platform == 'IOS'
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "15.3"
+
+      # NOTE: install libs
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ matrix.platform }}-cache-node-modules-${{ hashFiles('yarn.lock') }}
+
+      - name: Cache Pods
+        if: matrix.platform == 'IOS'
+        id: cache-pods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            ios/Podfile.lock
+          key: cache-pods-${{ hashFiles('yarn.lock') }}
+
+      - name: Pod install
+        if: ${{ (matrix.platform == 'IOS') && (steps.cache-pods.outputs.cache-hit != 'true') }}
+        working-directory: ios
+        run: pod install
+
+      - name: Cache Xcode build
+        uses: irgaly/xcode-cache@v1
+        if: matrix.platform == 'IOS'
+        with:
+          key: xcode-cache-deriveddata-${{ needs.init.outputs.env }}-${{ hashFiles('yarn.lock') }}
+          restore-keys: xcode-cache-deriveddata-${{ needs.init.outputs.env }}-
+
+      # NOTE: load environment and file
+      - name: Load secret files
+        run: bash .github/scripts/load_secret_file.sh
+
+      - name: Change version and build number
+        run: bash .github/scripts/change_version_and_build_number.sh
+
+      - name: Config environment
+        run: bash .github/scripts/config_environment.sh
+
+      - name: Generate launcher icon
+        uses: borales/actions-yarn@v5
+        with:
+          cmd: appicon:create
+
+      - name: Install certificate and provision
+        if: matrix.platform == 'IOS'
+        run: bash .github/scripts/install_cert_and_provision.sh
+
+      - name: Link Node (/usr/local/bin/node)
+        if: matrix.platform == 'IOS'
+        run: ln -s $(command -v node) /usr/local/bin/node
+
+      # NOTE: start build
+      - name: Build IPA
+        if: matrix.format == 'IPA'
+        uses: maierj/fastlane-action@v3.1.0
+        with:
+          lane: "ios ipa"
+
+      - name: Build APK
+        if: matrix.format == 'APK'
+        uses: borales/actions-yarn@v5
+        with:
+          cmd: release:android --warning-mode all
+
+      - name: Build AAB
+        if: matrix.format == 'AAB'
+        uses: borales/actions-yarn@v5
+        with:
+          cmd: release:play
+
+      # NOTE: deploy
+      - name: Deploy ipa
+        if: matrix.format == 'IPA'
+        uses: maierj/fastlane-action@v3.1.0
+        with:
+          lane: ios testflight
+
+      - name: Deploy APK to firebase
+        if: matrix.format == 'APK'
+        uses: maierj/fastlane-action@v3.1.0
+        with:
+          lane: android beta
+
+      - name: Deploy AAB to playstore
+        if: matrix.format == 'AAB'
+        uses: maierj/fastlane-action@v3.1.0
+        with:
+          lane: android upload_to_open_testing_play_store
+
+      - name: Send telegram message
+        if: vars.IS_SILENT != 'true'
+        uses: PacificPromise/macos-telegram-action@main
+        with:
+          type: channel
+          message: "✅ - Success ${{ matrix.format }}: ${{ needs.init.outputs.message-information }}"
+
+      - name: Send telegram message failure
+        if: ${{ failure() && vars.IS_SILENT != 'true' }}
+        uses: PacificPromise/macos-telegram-action@main
+        with:
+          type: channel
+          message: "💥 - Failure ${{ matrix.format }}: ${{ needs.init.outputs.message-information }}"
