@@ -296,3 +296,36 @@ jobs:
         with:
           type: channel
           message: "💥 - Failure ${{ matrix.format }}: ${{ needs.init.outputs.message-information }}"
+
+  after-deploy:
+    needs: [deploy]
+    name: After Deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MAIN_REPOSITORY }}
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ github.event.client_payload.ref_name }}
+
+      - name: Get environment full
+        uses: dkershner6/switch-case-action@v1
+        id: switch-case
+        with:
+          default: "debug"
+          conditionals-with-values: |
+            ${{ contains(github.event.client_payload.ref_name, 'prd') }} => echo 'production'
+            ${{ contains(github.event.client_payload.ref_name, 'stg') }} => echo 'staging'
+            ${{ contains(github.event.client_payload.ref_name, 'dev') }} => echo 'development'
+
+      - name: Create Sentry release
+        uses: getsentry/action-release@v1
+        if: ${{ steps.switch-case.outputs.value != 'debug' }}
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        with:
+          environment: ${{ steps.switch-case.outputs.value }}
+          version: ${{ github.event.client_payload.ref_name }}
