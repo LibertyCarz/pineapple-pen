@@ -315,9 +315,9 @@ jobs:
         with:
           default: "debug"
           conditionals-with-values: |
-            ${{ contains(github.event.client_payload.ref_name, 'prd') }} => echo 'production'
-            ${{ contains(github.event.client_payload.ref_name, 'stg') }} => echo 'staging'
-            ${{ contains(github.event.client_payload.ref_name, 'dev') }} => echo 'development'
+            ${{ contains(github.event.client_payload.ref_name, 'prd') }} => production
+            ${{ contains(github.event.client_payload.ref_name, 'stg') }} => staging
+            ${{ contains(github.event.client_payload.ref_name, 'dev') }} => development
 
       - name: Get version and build number
         id: get-version-build-number
