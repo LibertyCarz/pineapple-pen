@@ -68,10 +68,10 @@ jobs:
 
       - name: Log value
         run: |
-          echo tag-source: $REF_NAME
-          echo matrix: ${{ steps.set-matrix.outputs.value }}
-          echo message-information: ${{ steps.get-message-information.outputs.value }}
-          echo env: ${{ steps.set-env.outputs.value }}
+          echo "tag-source: $REF_NAME"
+          echo "matrix: ${{ steps.set-matrix.outputs.value }}"
+          echo "message-information: ${{ steps.get-message-information.outputs.value }}"
+          echo "env: ${{ steps.set-env.outputs.value }}"
 
       - name: Send telegram message
         if: vars.IS_SILENT != 'true'
@@ -319,6 +319,13 @@ jobs:
             ${{ contains(github.event.client_payload.ref_name, 'stg') }} => echo 'staging'
             ${{ contains(github.event.client_payload.ref_name, 'dev') }} => echo 'development'
 
+      - name: Get version and build number
+        id: get-version-build-number
+        run: |
+          source .github/scripts/utils.sh
+          echo "value=$(get_version_and_build_number)" >> "$GITHUB_OUTPUT"
+        timeout-minutes: 1
+
       - name: Create Sentry release
         uses: getsentry/action-release@v1
         if: ${{ steps.switch-case.outputs.value != 'debug' }}
@@ -328,4 +335,4 @@ jobs:
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         with:
           environment: ${{ steps.switch-case.outputs.value }}
-          version: ${{ github.event.client_payload.ref_name }}
+          version: ${{ steps.get-version-build-number.outputs.value }}
