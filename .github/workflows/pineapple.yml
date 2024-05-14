@@ -311,7 +311,7 @@ jobs:
 
       - name: Get environment full
         uses: dkershner6/switch-case-action@v1
-        id: switch-case
+        id: get-environment
         with:
           default: "debug"
           conditionals-with-values: |
@@ -320,19 +320,20 @@ jobs:
             ${{ contains(github.event.client_payload.ref_name, 'dev') }} => development
 
       - name: Get version and build number
-        id: get-version-build-number
+        id: get-version-sentry
         run: |
           source .github/scripts/utils.sh
-          echo "value=$(get_version_and_build_number)" >> "$GITHUB_OUTPUT"
+          echo "value=$(get_sentry_version)" >> "$GITHUB_OUTPUT"
         timeout-minutes: 1
 
       - name: Create Sentry release
         uses: getsentry/action-release@v1
-        if: ${{ steps.switch-case.outputs.value != 'debug' }}
+        if: ${{ steps.get-environment.outputs.value != 'debug' }}
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         with:
-          environment: ${{ steps.switch-case.outputs.value }}
-          version: ${{ steps.get-version-build-number.outputs.value }}
+          set_commits: skip
+          environment: ${{ steps.get-environment.outputs.value }}
+          version: ${{ steps.get-version-sentry.outputs.value }}
