@@ -14,7 +14,8 @@ env:
   TRIGGERING_ACTOR: ${{ github.event.client_payload.triggering_actor }}
   MAIN_REPOSITORY: ${{ secrets.MEME_REPOSITORY }}
   TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-  TELEGRAM_CHANNEL_ID: ${{ vars.TELEGRAM_CHANNEL_ID }}
+  TELEGRAM_GROUP_ID: ${{ vars.TELEGRAM_GROUP_ID }}
+  TELEGRAM_TOPIC_ID: ${{ vars.TELEGRAM_TOPIC_ID }}
   API_KEY_JSON: ${{ secrets.API_KEY_JSON }}
   PRO_API_KEY_JSON: ${{ secrets.PRO_API_KEY_JSON }}
   PRO_PLAY_STORE_KEY_JSON: ${{ secrets.PRO_PLAY_STORE_KEY_JSON }}
@@ -77,7 +78,7 @@ jobs:
         if: vars.IS_SILENT != 'true'
         uses: PacificPromise/macos-telegram-action@main
         with:
-          type: channel
+          type: topic
           message: "🎬 -  Start build: ${{ steps.get-message-information.outputs.value }}"
 
   prepare:
@@ -129,7 +130,7 @@ jobs:
         if: ${{ failure() && vars.IS_SILENT != 'true' }}
         uses: PacificPromise/macos-telegram-action@main
         with:
-          type: channel
+          type: topic
           message: "💥 - Failure ${{ matrix.platform }}: ${{ needs.init.outputs.message-information }}"
 
   deploy:
@@ -287,14 +288,14 @@ jobs:
         if: vars.IS_SILENT != 'true'
         uses: PacificPromise/macos-telegram-action@main
         with:
-          type: channel
+          type: topic
           message: "✅ - Success ${{ matrix.format }}: ${{ needs.init.outputs.message-information }}"
 
       - name: Send telegram message failure
         if: ${{ failure() && vars.IS_SILENT != 'true' }}
         uses: PacificPromise/macos-telegram-action@main
         with:
-          type: channel
+          type: topic
           message: "💥 - Failure ${{ matrix.format }}: ${{ needs.init.outputs.message-information }}"
 
   after-deploy:
