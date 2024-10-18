@@ -191,7 +191,7 @@ jobs:
         if: matrix.platform == 'IOS'
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: "15.3"
+          xcode-version: "16"
 
       # NOTE: install libs
       - name: Cache node_modules
