@@ -27,7 +27,7 @@ env:
 jobs:
   init:
     name: Init
-    runs-on: macos-14
+    runs-on: macos-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.value }}
       message-information: ${{ steps.get-message-information.outputs.value }}
@@ -43,9 +43,9 @@ jobs:
       - name: Set matrix
         id: set-matrix
         run: |
-          MATRIX="[{\"format\":\"IPA\",\"name\":\"macos-14\",\"platform\":\"IOS\"},{\"format\":\"APK\",\"name\":\"ubuntu-22.04\",\"platform\":\"ANDROID\"}]"
+          MATRIX="[{\"format\":\"IPA\",\"name\":\"macos-latest\",\"platform\":\"IOS\"},{\"format\":\"APK\",\"name\":\"ubuntu-22.04\",\"platform\":\"ANDROID\"}]"
           if [[ "$REF_NAME" =~ "prd" ]]; then
-            MATRIX="[{\"format\":\"IPA\",\"name\":\"macos-14\",\"platform\":\"IOS\"},{\"format\":\"APK\",\"name\":\"ubuntu-22.04\",\"platform\":\"ANDROID\"},{\"format\":\"AAB\",\"name\":\"ubuntu-22.04\",\"platform\":\"ANDROID\"}]"
+            MATRIX="[{\"format\":\"IPA\",\"name\":\"macos-latest\",\"platform\":\"IOS\"},{\"format\":\"APK\",\"name\":\"ubuntu-22.04\",\"platform\":\"ANDROID\"},{\"format\":\"AAB\",\"name\":\"ubuntu-22.04\",\"platform\":\"ANDROID\"}]"
           fi
           echo "value=$MATRIX" >> $GITHUB_OUTPUT
 
@@ -89,7 +89,7 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - name: "macos-14"
+          - name: "macos-latest"
             platform: "IOS"
           - name: "ubuntu-22.04"
             platform: "ANDROID"
@@ -112,7 +112,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: node_modules
-          key: ${{ matrix.platform }}-cache-node-modules-${{ hashFiles('yarn.lock') }}
+          key: ${{ matrix.platform }}-cache-node-modules-v2-${{ hashFiles('yarn.lock') }}
           lookup-only: true
 
       - name: Unlock ssh agent
@@ -152,10 +152,10 @@ jobs:
           ref: ${{ github.event.client_payload.ref_name}}
 
       # NOTE: setup environment
-      - name: Setup ruby
+      - name: Setup ruby 3.2.2
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: ".ruby-version"
+          ruby-version: "3.2.2"
           bundler-cache: true
 
       - name: Setup Node v18
@@ -185,7 +185,7 @@ jobs:
         if: matrix.platform == 'IOS'
         uses: maxim-lobanov/setup-cocoapods@v1
         with:
-          version: 1.14.3
+          version: 1.15.2
 
       - name: Select Xcode
         if: matrix.platform == 'IOS'
@@ -199,7 +199,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: node_modules
-          key: ${{ matrix.platform }}-cache-node-modules-${{ hashFiles('yarn.lock') }}
+          key: ${{ matrix.platform }}-cache-node-modules-v2-${{ hashFiles('yarn.lock') }}
 
       - name: Cache Pods
         if: matrix.platform == 'IOS'
@@ -209,7 +209,7 @@ jobs:
           path: |
             ios/Pods
             ios/Podfile.lock
-          key: cache-pods-${{ hashFiles('yarn.lock') }}
+          key: cache-pods-v2-${{ hashFiles('yarn.lock') }}
 
       - name: Pod install
         if: ${{ (matrix.platform == 'IOS') && (steps.cache-pods.outputs.cache-hit != 'true') }}
