@@ -212,7 +212,7 @@ jobs:
           key: cache-pods-v2-${{ hashFiles('yarn.lock') }}
 
       - name: Pod install
-        if: ${{ (matrix.platform == 'IOS') && (steps.cache-pods.outputs.cache-hit != 'true') }}
+        if: matrix.platform == 'IOS'
         working-directory: ios
         run: pod install
 
